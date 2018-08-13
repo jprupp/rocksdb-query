@@ -1,0 +1,45 @@
+name:                rocksdb-query
+version:             1.0.0
+github:              "xenog/rocksdb-query"
+license:             PublicDomain
+license-file:        UNLICENSE
+author:              "Jean-Pierre Rupp"
+maintainer:          "xenog@protonmail.com"
+copyright:           "No Rights Reserved"
+
+extra-source-files:
+- README.md
+- CHANGELOG.md
+
+# Metadata used when publishing your package
+synopsis:            RocksDB database querying library for Haskell
+category:            Database
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/xenog/rocksdb-query#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- bytestring
+- cereal
+- conduit
+- resourcet
+- rocksdb-haskell
+- unliftio
+
+library:
+  source-dirs: src
+
+tests:
+  rocksdb-query-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - rocksdb-query
+    - hspec
