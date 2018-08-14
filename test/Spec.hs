@@ -23,12 +23,11 @@ instance Serialize KeyOne where
 
 instance Serialize KeyTwo where
     put (KeyTwo x y) = do
-        putWord8 0x02
-        S.put x
+        S.put (KeyTwoBase x)
         S.put y
     get = do
-        getWord8 >>= guard . (== 0x02)
-        KeyTwo <$> S.get <*> S.get
+        KeyTwoBase x <- S.get
+        KeyTwo x <$> S.get
 
 instance Serialize KeyTwoBase where
     put (KeyTwoBase x) = do
@@ -51,25 +50,25 @@ main =
     setup $ \db ->
         describe "database" $ do
             it "reads a record" $ do
-                r <- query db Nothing (KeyTwo 1 2)
+                r <- retrieve db Nothing (KeyTwo 1 2)
                 r `shouldBe` Just "Hello First World Again!"
             it "reads two records at the end" $ do
                 let ls =
                         [ (KeyTwo 2 1, "Hello Second World!")
                         , (KeyTwo 2 2, "Hello Second World Again!")
                         ]
-                rs <- queryList db Nothing (KeyTwoBase 2)
+                rs <- matchingAsList db Nothing (KeyTwoBase 2)
                 rs `shouldBe` ls
             it "reads two records in the middle" $ do
                 let ls =
                         [ (KeyTwo 1 1, "Hello First World!")
                         , (KeyTwo 1 2, "Hello First World Again!")
                         ]
-                rs <- queryList db Nothing (KeyTwoBase 1)
+                rs <- matchingAsList db Nothing (KeyTwoBase 1)
                 rs `shouldBe` ls
             it "query and skip" $ do
                 let ex = (KeyTwo 2 2, "Hello Second World Again!")
-                rs <- queryListSkip db Nothing (KeyTwoBase 2) (KeyTwo 2 2)
+                rs <- matchingSkipAsList db Nothing (KeyTwoBase 2) (KeyTwo 2 2)
                 rs `shouldBe` [ex]
   where
     setup f =

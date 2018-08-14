@@ -9,13 +9,13 @@ import           Database.RocksDB         as R
 import           UnliftIO
 import           UnliftIO.Resource
 
-query ::
+retrieve ::
        (MonadIO m, Serialize key, Serialize value)
     => DB
     -> Maybe Snapshot
     -> key
     -> m (Maybe value)
-query db snapshot key = do
+retrieve db snapshot key = do
     let opts = defaultReadOptions {useSnapshot = snapshot}
     R.get db opts (encode key) >>= \case
         Nothing -> return Nothing
@@ -24,15 +24,15 @@ query db snapshot key = do
                 Left e  -> throwString e
                 Right x -> return (Just x)
 
-queryConduit ::
+matching ::
        (MonadResource m, Serialize base, Serialize key, Serialize value)
     => DB
     -> Maybe Snapshot
     -> base
     -> ConduitT () (key, value) m ()
-queryConduit db snapshot base = queryConduitSkip db snapshot base base
+matching db snapshot base = matchingSkip db snapshot base base
 
-queryConduitSkip ::
+matchingSkip ::
        ( MonadResource m
        , Serialize base
        , Serialize start
@@ -44,7 +44,7 @@ queryConduitSkip ::
     -> base
     -> start
     -> ConduitT () (key, value) m ()
-queryConduitSkip db snapshot base start = do
+matchingSkip db snapshot base start = do
     let opts = defaultReadOptions {useSnapshot = snapshot}
     withIterator db opts $ \it -> do
         iterSeek it (encode start)
@@ -78,15 +78,15 @@ insertOp key value = R.Put (encode key) (encode value)
 deleteOp :: Serialize key => key -> BatchOp
 deleteOp key = Del (encode key)
 
-queryFirst ::
+firstMatching ::
        (MonadIO m, Serialize base, Serialize key, Serialize value)
     => DB
     -> Maybe Snapshot
     -> base
     -> m (Maybe (key, value))
-queryFirst db snapshot base = queryFirstSkip db snapshot base base
+firstMatching db snapshot base = firstMatchingSkip db snapshot base base
 
-queryFirstSkip ::
+firstMatchingSkip ::
        ( MonadIO m
        , Serialize base
        , Serialize start
@@ -98,19 +98,19 @@ queryFirstSkip ::
     -> base
     -> start
     -> m (Maybe (key, value))
-queryFirstSkip db snapshot base start =
+firstMatchingSkip db snapshot base start =
     liftIO . runResourceT . runConduit $
-    queryConduitSkip db snapshot base start .| CC.head
+    matchingSkip db snapshot base start .| CC.head
 
-queryList ::
+matchingAsList ::
        (MonadIO m, Serialize base, Serialize key, Serialize value)
     => DB
     -> Maybe Snapshot
     -> base
     -> m [(key, value)]
-queryList db snapshot base = queryListSkip db snapshot base base
+matchingAsList db snapshot base = matchingSkipAsList db snapshot base base
 
-queryListSkip ::
+matchingSkipAsList ::
        ( MonadIO m
        , Serialize base
        , Serialize start
@@ -122,6 +122,6 @@ queryListSkip ::
     -> base
     -> start
     -> m [(key, value)]
-queryListSkip db snapshot base start =
+matchingSkipAsList db snapshot base start =
     liftIO . runResourceT . runConduit $
-    queryConduitSkip db snapshot base start .| CC.sinkList
+    matchingSkip db snapshot base start .| CC.sinkList
