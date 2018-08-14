@@ -12,7 +12,6 @@ import           UnliftIO.Resource
 
 class Key key
 class KeyValue key value
-class KeyBase key value base
 
 retrieve ::
        (MonadIO m, KeyValue key value, Serialize key, Serialize value)
@@ -31,12 +30,11 @@ retrieve db snapshot key = do
 
 matchRecursive ::
        ( MonadIO m
-       , KeyBase key value base
-       , Serialize base
+       , KeyValue key value
        , Serialize key
        , Serialize value
        )
-    => base
+    => key
     -> Iterator
     -> ConduitT () (key, value) m ()
 matchRecursive base it =
@@ -57,14 +55,13 @@ matchRecursive base it =
 
 matching ::
        ( MonadResource m
-       , KeyBase key value base
-       , Serialize base
+       , KeyValue key value
        , Serialize key
        , Serialize value
        )
     => DB
     -> Maybe Snapshot
-    -> base
+    -> key
     -> ConduitT () (key, value) m ()
 matching db snapshot base = do
     let opts = defaultReadOptions {useSnapshot = snapshot}
@@ -74,14 +71,13 @@ matching db snapshot base = do
 
 matchingSkip ::
        ( MonadResource m
-       , KeyBase key value base
-       , Serialize base
+       , KeyValue key value
        , Serialize key
        , Serialize value
        )
     => DB
     -> Maybe Snapshot
-    -> base
+    -> key
     -> key
     -> ConduitT () (key, value) m ()
 matchingSkip db snapshot base start = do
@@ -116,28 +112,26 @@ writeBatch db = write db defaultWriteOptions
 
 firstMatching ::
        ( MonadUnliftIO m
-       , KeyBase key value base
-       , Serialize base
+       , KeyValue key value
        , Serialize key
        , Serialize value
        )
     => DB
     -> Maybe Snapshot
-    -> base
+    -> key
     -> m (Maybe (key, value))
 firstMatching db snapshot base =
     runResourceT . runConduit $ matching db snapshot base .| CC.head
 
 firstMatchingSkip ::
        ( MonadUnliftIO m
-       , KeyBase key value base
-       , Serialize base
+       , KeyValue key value
        , Serialize key
        , Serialize value
        )
     => DB
     -> Maybe Snapshot
-    -> base
+    -> key
     -> key
     -> m (Maybe (key, value))
 firstMatchingSkip db snapshot base start =
@@ -146,14 +140,13 @@ firstMatchingSkip db snapshot base start =
 
 matchingAsList ::
        ( MonadUnliftIO m
-       , KeyBase key value base
-       , Serialize base
+       , KeyValue key value
        , Serialize key
        , Serialize value
        )
     => DB
     -> Maybe Snapshot
-    -> base
+    -> key
     -> m [(key, value)]
 matchingAsList db snapshot base =
     runResourceT . runConduit $
@@ -161,14 +154,13 @@ matchingAsList db snapshot base =
 
 matchingSkipAsList ::
        ( MonadUnliftIO m
-       , KeyBase key value base
-       , Serialize base
+       , KeyValue key value
        , Serialize key
        , Serialize value
        )
     => DB
     -> Maybe Snapshot
-    -> base
+    -> key
     -> key
     -> m [(key, value)]
 matchingSkipAsList db snapshot base start =
