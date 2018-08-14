@@ -1,4 +1,5 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Database.RocksDB.Query where
 
 import qualified Data.ByteString          as B
@@ -9,8 +10,12 @@ import           Database.RocksDB         as R
 import           UnliftIO
 import           UnliftIO.Resource
 
+class Key key
+class KeyValue key value
+class KeyBase key value base
+
 retrieve ::
-       (MonadIO m, Serialize key, Serialize value)
+       (MonadIO m, KeyValue key value, Serialize key, Serialize value)
     => DB
     -> Maybe Snapshot
     -> key
@@ -24,107 +29,148 @@ retrieve db snapshot key = do
                 Left e  -> throwString e
                 Right x -> return (Just x)
 
-matching ::
-       (MonadResource m, Serialize base, Serialize key, Serialize value)
-    => DB
-    -> Maybe Snapshot
-    -> base
-    -> ConduitT () (key, value) m ()
-matching db snapshot base = matchingSkip db snapshot base base
-
-matchingSkip ::
-       ( MonadResource m
+matchRecursive ::
+       ( MonadIO m
+       , KeyBase key value base
        , Serialize base
-       , Serialize start
+       , Serialize key
+       , Serialize value
+       )
+    => base
+    -> Iterator
+    -> ConduitT () (key, value) m ()
+matchRecursive base it =
+    iterEntry it >>= \case
+        Nothing -> return ()
+        Just (key_bytes, value_bytes) -> do
+            let start_bytes = B.take (B.length base_bytes) key_bytes
+            if start_bytes /= base_bytes
+                then return ()
+                else do
+                    key <- either throwString return (decode key_bytes)
+                    value <- either throwString return (decode value_bytes)
+                    yield (key, value)
+                    iterNext it
+                    matchRecursive base it
+  where
+    base_bytes = encode base
+
+matching ::
+       ( MonadResource m
+       , KeyBase key value base
+       , Serialize base
        , Serialize key
        , Serialize value
        )
     => DB
     -> Maybe Snapshot
     -> base
-    -> start
+    -> ConduitT () (key, value) m ()
+matching db snapshot base = do
+    let opts = defaultReadOptions {useSnapshot = snapshot}
+    withIterator db opts $ \it -> do
+        iterSeek it (encode base)
+        matchRecursive base it
+
+matchingSkip ::
+       ( MonadResource m
+       , KeyBase key value base
+       , Serialize base
+       , Serialize key
+       , Serialize value
+       )
+    => DB
+    -> Maybe Snapshot
+    -> base
+    -> key
     -> ConduitT () (key, value) m ()
 matchingSkip db snapshot base start = do
     let opts = defaultReadOptions {useSnapshot = snapshot}
     withIterator db opts $ \it -> do
         iterSeek it (encode start)
-        recurse it
-  where
-    base_bytes = encode base
-    recurse it =
-        iterEntry it >>= \case
-            Nothing -> return ()
-            Just (key_bytes, value_bytes) -> do
-                let start_bytes = B.take (B.length base_bytes) key_bytes
-                if start_bytes /= base_bytes
-                    then return ()
-                    else do
-                        key <- either throwString return (decode key_bytes)
-                        value <- either throwString return (decode value_bytes)
-                        yield (key, value)
-                        iterNext it
-                        recurse it
+        matchRecursive base it
 
 insert ::
-       (MonadIO m, Serialize key, Serialize value) => DB -> key -> value -> m ()
+       (MonadIO m, KeyValue key value, Serialize key, Serialize value)
+    => DB
+    -> key
+    -> value
+    -> m ()
 insert db key value = R.put db defaultWriteOptions (encode key) (encode value)
 
-remove :: (MonadIO m, Serialize key) => DB -> key -> m ()
+remove :: (MonadIO m, Key key, Serialize key) => DB -> key -> m ()
 remove db key = delete db defaultWriteOptions (encode key)
 
-insertOp :: (Serialize key, Serialize value) => key -> value -> BatchOp
+insertOp ::
+       (KeyValue key value, Serialize key, Serialize value)
+    => key
+    -> value
+    -> BatchOp
 insertOp key value = R.Put (encode key) (encode value)
 
-deleteOp :: Serialize key => key -> BatchOp
+deleteOp :: (Key key, Serialize key) => key -> BatchOp
 deleteOp key = Del (encode key)
 
 writeBatch :: MonadIO m => DB -> WriteBatch -> m ()
 writeBatch db = write db defaultWriteOptions
 
 firstMatching ::
-       (MonadIO m, Serialize base, Serialize key, Serialize value)
-    => DB
-    -> Maybe Snapshot
-    -> base
-    -> m (Maybe (key, value))
-firstMatching db snapshot base = firstMatchingSkip db snapshot base base
-
-firstMatchingSkip ::
-       ( MonadIO m
+       ( MonadUnliftIO m
+       , KeyBase key value base
        , Serialize base
-       , Serialize start
        , Serialize key
        , Serialize value
        )
     => DB
     -> Maybe Snapshot
     -> base
-    -> start
+    -> m (Maybe (key, value))
+firstMatching db snapshot base =
+    runResourceT . runConduit $ matching db snapshot base .| CC.head
+
+firstMatchingSkip ::
+       ( MonadUnliftIO m
+       , KeyBase key value base
+       , Serialize base
+       , Serialize key
+       , Serialize value
+       )
+    => DB
+    -> Maybe Snapshot
+    -> base
+    -> key
     -> m (Maybe (key, value))
 firstMatchingSkip db snapshot base start =
-    liftIO . runResourceT . runConduit $
+    runResourceT . runConduit $
     matchingSkip db snapshot base start .| CC.head
 
 matchingAsList ::
-       (MonadIO m, Serialize base, Serialize key, Serialize value)
-    => DB
-    -> Maybe Snapshot
-    -> base
-    -> m [(key, value)]
-matchingAsList db snapshot base = matchingSkipAsList db snapshot base base
-
-matchingSkipAsList ::
-       ( MonadIO m
+       ( MonadUnliftIO m
+       , KeyBase key value base
        , Serialize base
-       , Serialize start
        , Serialize key
        , Serialize value
        )
     => DB
     -> Maybe Snapshot
     -> base
-    -> start
+    -> m [(key, value)]
+matchingAsList db snapshot base =
+    runResourceT . runConduit $
+    matching db snapshot base .| CC.sinkList
+
+matchingSkipAsList ::
+       ( MonadUnliftIO m
+       , KeyBase key value base
+       , Serialize base
+       , Serialize key
+       , Serialize value
+       )
+    => DB
+    -> Maybe Snapshot
+    -> base
+    -> key
     -> m [(key, value)]
 matchingSkipAsList db snapshot base start =
-    liftIO . runResourceT . runConduit $
+    runResourceT . runConduit $
     matchingSkip db snapshot base start .| CC.sinkList

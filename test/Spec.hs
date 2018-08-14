@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 import           Control.Monad
 import           Data.Serialize         as S
 import           Data.Word
@@ -7,11 +9,14 @@ import           Test.Hspec
 import           UnliftIO
 
 newtype KeyOne = KeyOne Word32 deriving (Show, Eq)
-data KeyTwo = KeyTwo Word32 Word32 deriving (Show, Eq)
 newtype KeyTwoBase = KeyTwoBase Word32 deriving (Show, Eq)
-
 newtype ValueOne = ValueOne String deriving (Show, Eq)
 newtype ValueTwo = ValueTwo String deriving (Show, Eq)
+data KeyTwo = KeyTwo KeyTwoBase Word32 deriving (Show, Eq)
+
+instance KeyValue KeyTwo String
+instance KeyValue KeyOne String
+instance KeyBase KeyTwo String KeyTwoBase
 
 instance Serialize KeyOne where
     put (KeyOne x) = do
@@ -23,11 +28,9 @@ instance Serialize KeyOne where
 
 instance Serialize KeyTwo where
     put (KeyTwo x y) = do
-        S.put (KeyTwoBase x)
+        S.put x
         S.put y
-    get = do
-        KeyTwoBase x <- S.get
-        KeyTwo x <$> S.get
+    get = KeyTwo <$> S.get <*> S.get
 
 instance Serialize KeyTwoBase where
     put (KeyTwoBase x) = do
@@ -50,25 +53,30 @@ main =
     setup $ \db ->
         describe "database" $ do
             it "reads a record" $ do
-                r <- retrieve db Nothing (KeyTwo 1 2)
+                r <- retrieve db Nothing (KeyTwo (KeyTwoBase 1) 2)
                 r `shouldBe` Just "Hello First World Again!"
             it "reads two records at the end" $ do
                 let ls =
-                        [ (KeyTwo 2 1, "Hello Second World!")
-                        , (KeyTwo 2 2, "Hello Second World Again!")
+                        [ (KeyTwo (KeyTwoBase 2) 1, "Hello Second World!")
+                        , (KeyTwo (KeyTwoBase 2) 2, "Hello Second World Again!")
                         ]
                 rs <- matchingAsList db Nothing (KeyTwoBase 2)
                 rs `shouldBe` ls
             it "reads two records in the middle" $ do
                 let ls =
-                        [ (KeyTwo 1 1, "Hello First World!")
-                        , (KeyTwo 1 2, "Hello First World Again!")
+                        [ (KeyTwo (KeyTwoBase 1) 1, "Hello First World!")
+                        , (KeyTwo (KeyTwoBase 1) 2, "Hello First World Again!")
                         ]
                 rs <- matchingAsList db Nothing (KeyTwoBase 1)
                 rs `shouldBe` ls
             it "query and skip" $ do
-                let ex = (KeyTwo 2 2, "Hello Second World Again!")
-                rs <- matchingSkipAsList db Nothing (KeyTwoBase 2) (KeyTwo 2 2)
+                let ex = (KeyTwo (KeyTwoBase 2) 2, "Hello Second World Again!")
+                rs <-
+                    matchingSkipAsList
+                        db
+                        Nothing
+                        (KeyTwoBase 2)
+                        (KeyTwo (KeyTwoBase 2) 2)
                 rs `shouldBe` [ex]
   where
     setup f =
@@ -81,7 +89,7 @@ insertTestRecords :: MonadIO m => DB -> m ()
 insertTestRecords db = do
     insert db (KeyOne 1) "Hello World!"
     insert db (KeyOne 2) "Hello World Again!"
-    insert db (KeyTwo 1 1) "Hello First World!"
-    insert db (KeyTwo 1 2) "Hello First World Again!"
-    insert db (KeyTwo 2 1) "Hello Second World!"
-    insert db (KeyTwo 2 2) "Hello Second World Again!"
+    insert db (KeyTwo (KeyTwoBase 1) 1) "Hello First World!"
+    insert db (KeyTwo (KeyTwoBase 1) 2) "Hello First World Again!"
+    insert db (KeyTwo (KeyTwoBase 2) 1) "Hello Second World!"
+    insert db (KeyTwo (KeyTwoBase 2) 2) "Hello Second World Again!"
