@@ -52,23 +52,23 @@ main =
         describe "database" $ do
             it "reads a record" $ do
                 r <- query db Nothing (KeyTwo 1 2)
-                r `shouldBe` Just "Hello Second World Again!"
+                r `shouldBe` Just "Hello First World Again!"
             it "reads two records at the end" $ do
                 let ls =
-                        [ (KeyTwo 2 1, "Hello Third World!")
-                        , (KeyTwo 2 2, "Hello Third World Again!")
+                        [ (KeyTwo 2 1, "Hello Second World!")
+                        , (KeyTwo 2 2, "Hello Second World Again!")
                         ]
                 rs <- queryList db Nothing (KeyTwoBase 2)
                 rs `shouldBe` ls
             it "reads two records in the middle" $ do
                 let ls =
-                        [ (KeyTwo 1 1, "Hello Second World!")
-                        , (KeyTwo 1 2, "Hello Second World Again!")
+                        [ (KeyTwo 1 1, "Hello First World!")
+                        , (KeyTwo 1 2, "Hello First World Again!")
                         ]
                 rs <- queryList db Nothing (KeyTwoBase 1)
                 rs `shouldBe` ls
             it "query and skip" $ do
-                let ex = (KeyTwo 2 2, "Hello Third World Again!")
+                let ex = (KeyTwo 2 2, "Hello Second World Again!")
                 rs <- queryListSkip db Nothing (KeyTwoBase 2) (KeyTwo 2 2)
                 rs `shouldBe` [ex]
   where
@@ -82,7 +82,7 @@ insertTestRecords :: MonadIO m => DB -> m ()
 insertTestRecords db = do
     insert db (KeyOne 1) "Hello World!"
     insert db (KeyOne 2) "Hello World Again!"
-    insert db (KeyTwo 1 1) "Hello Second World!"
-    insert db (KeyTwo 1 2) "Hello Second World Again!"
-    insert db (KeyTwo 2 1) "Hello Third World!"
-    insert db (KeyTwo 2 2) "Hello Third World Again!"
+    insert db (KeyTwo 1 1) "Hello First World!"
+    insert db (KeyTwo 1 2) "Hello First World Again!"
+    insert db (KeyTwo 2 1) "Hello Second World!"
+    insert db (KeyTwo 2 2) "Hello Second World Again!"
