@@ -78,6 +78,9 @@ insertOp key value = R.Put (encode key) (encode value)
 deleteOp :: Serialize key => key -> BatchOp
 deleteOp key = Del (encode key)
 
+writeBatch :: MonadIO m => DB -> WriteBatch -> m ()
+writeBatch db = write db defaultWriteOptions
+
 firstMatching ::
        (MonadIO m, Serialize base, Serialize key, Serialize value)
     => DB
