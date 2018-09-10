@@ -1,5 +1,5 @@
 name:                rocksdb-query
-version:             0.1.0
+version:             0.1.1
 github:              "xenog/rocksdb-query"
 license:             PublicDomain
 license-file:        UNLICENSE
@@ -8,8 +8,8 @@ maintainer:          "xenog@protonmail.com"
 copyright:           "No Rights Reserved"
 
 extra-source-files:
-- README.md
-- CHANGELOG.md
+  - README.md
+  - CHANGELOG.md
 
 # Metadata used when publishing your package
 synopsis:            RocksDB database querying library for Haskell
@@ -21,25 +21,26 @@ category:            Database
 description:         Please see the README on GitHub at <https://github.com/xenog/rocksdb-query#readme>
 
 dependencies:
-- base >= 4.7 && < 5
-- bytestring
-- cereal
-- conduit
-- resourcet
-- rocksdb-haskell
-- unliftio
+  - base >= 4.7 && < 5
+  - cereal
+  - unliftio
+  - rocksdb-haskell
 
 library:
   source-dirs: src
+  dependencies:
+    - bytestring
+    - conduit
+    - resourcet
 
 tests:
   rocksdb-query-test:
     main:                Spec.hs
     source-dirs:         test
     ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
     dependencies:
-    - rocksdb-query
-    - hspec
+      - rocksdb-query
+      - hspec
