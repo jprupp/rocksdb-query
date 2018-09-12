@@ -52,9 +52,9 @@ matchRecursive base it =
   where
     base_bytes = encode base
 
--- | Use the passed key to filter all the elements whose key prefix match it.
--- Use a sum type for keys that allows to set a version of the key that has a
--- shorter length when serialized.
+-- | Pass a short key to filter all the elements whose key prefix match it. Use
+-- a sum type for keys that allows to create a version of the key that
+-- serializes to a prefix of a full key.
 --
 -- > data MyKey = ShortKey String | FullKey String String deriving Show
 -- > instance Serialize MyKey where
