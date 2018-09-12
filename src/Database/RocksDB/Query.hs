@@ -54,27 +54,8 @@ matchRecursive base it =
 
 -- | Use the passed key to filter all the elements whose key prefix match it.
 -- Use a sum type for keys that allows to set a version of the key that has a
--- shorter length when serialized..
+-- shorter length when serialized.
 --
--- > #!/usr/bin/env stack
--- > {- stack
--- >   --resolver lts-12.9
--- >   --install-ghc
--- >   runghc
--- >   --package base
--- >   --package cereal
--- >   --package conduit
--- >   --package rocksdb-haskell-1.0.1
--- >   --package rocksdb-query-0.1.2
--- >   --
--- >   -hide-all-packages
--- >   -}
--- > {-# LANGUAGE FlexibleInstances     #-}
--- > {-# LANGUAGE MultiParamTypeClasses #-}
--- > import           Conduit
--- > import           Data.Serialize
--- > import           Database.RocksDB       (createIfMissing, defaultOptions, open)
--- > import           Database.RocksDB.Query (KeyValue, insert, matching)
 -- > data MyKey = ShortKey String | FullKey String String deriving Show
 -- > instance Serialize MyKey where
 -- >   put (ShortKey a)  = put a
@@ -87,10 +68,12 @@ matchRecursive base it =
 -- >   Just record <- runResourceT . runConduit $
 -- >     matching db Nothing (ShortKey "hello") .| headC
 -- >   print (record :: (MyKey, String))
+-- >   -- (Fullkey "hello" "world","despite all my rage")
 --
--- In this example you may serialize the @ShortKey@ and match all the elements
--- in the database that start with it as a prefix. Deserializing will always
--- yield a @FullKey@.
+-- In this example the @ShortKey@ is serialized to the prefix of the only
+-- element in the database, which is then returned. Since the 'get' function of
+-- the 'Serialize' instance for @MyKey@ only understands how to deserialize a
+-- @FullKey@, then that is what is returned.
 matching ::
        ( MonadResource m
        , KeyValue key value
