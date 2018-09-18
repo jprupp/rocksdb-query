@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 import           Control.Applicative
 import           Control.Monad
+import           Data.Default
 import           Data.Serialize         as S
 import           Data.Word
 import           Database.RocksDB       as R
@@ -42,28 +43,28 @@ main =
     setup $ \db ->
         describe "database" $ do
             it "reads a record" $ do
-                r <- retrieve db Nothing (KeyTwo 1 2)
+                r <- retrieve db def (KeyTwo 1 2)
                 r `shouldBe` Just "Hello First World Again!"
             it "reads two records at the end" $ do
                 let ls =
                         [ (KeyTwo 2 1, "Hello Second World!")
                         , (KeyTwo 2 2, "Hello Second World Again!")
                         ]
-                rs <- matchingAsList db Nothing (KeyTwoBase 2)
+                rs <- matchingAsList db def (KeyTwoBase 2)
                 rs `shouldBe` ls
             it "reads two records in the middle" $ do
                 let ls =
                         [ (KeyTwo 1 1, "Hello First World!")
                         , (KeyTwo 1 2, "Hello First World Again!")
                         ]
-                rs <- matchingAsList db Nothing (KeyTwoBase 1)
+                rs <- matchingAsList db def (KeyTwoBase 1)
                 rs `shouldBe` ls
             it "query and skip" $ do
                 let ex = (KeyTwo 2 2, "Hello Second World Again!")
                 rs <-
                     matchingSkipAsList
                         db
-                        Nothing
+                        def
                         (KeyTwoBase 2)
                         (KeyTwo 2 2)
                 rs `shouldBe` [ex]

@@ -2,10 +2,10 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 module Database.RocksDB.Query where
 
-import qualified Data.ByteString          as B
 import           Conduit
-import           Data.Serialize           as S
-import           Database.RocksDB         as R
+import qualified Data.ByteString  as B
+import           Data.Serialize   as S
+import           Database.RocksDB as R
 import           UnliftIO
 
 class Key key
@@ -15,11 +15,10 @@ class KeyValue key value
 retrieve ::
        (MonadIO m, KeyValue key value, Serialize key, Serialize value)
     => DB
-    -> Maybe Snapshot
+    -> ReadOptions
     -> key
     -> m (Maybe value)
-retrieve db snapshot key = do
-    let opts = defaultReadOptions {useSnapshot = snapshot}
+retrieve db opts key =
     R.get db opts (encode key) >>= \case
         Nothing -> return Nothing
         Just bytes ->
@@ -66,7 +65,7 @@ matchRecursive base it =
 -- >   db <- open "test-db" defaultOptions {createIfMissing = True}
 -- >   insert db (FullKey "hello" "world") "despite all my rage"
 -- >   Just record <- runResourceT . runConduit $
--- >     matching db Nothing (ShortKey "hello") .| headC
+-- >     matching db def (ShortKey "hello") .| headC
 -- >   print (record :: (MyKey, String))
 -- >   -- (Fullkey "hello" "world","despite all my rage")
 --
@@ -81,11 +80,10 @@ matching ::
        , Serialize value
        )
     => DB
-    -> Maybe Snapshot
+    -> ReadOptions
     -> key
     -> ConduitT () (key, value) m ()
-matching db snapshot base = do
-    let opts = defaultReadOptions {useSnapshot = snapshot}
+matching db opts base =
     withIterator db opts $ \it -> do
         iterSeek it (encode base)
         matchRecursive base it
@@ -99,12 +97,11 @@ matchingSkip ::
        , Serialize value
        )
     => DB
-    -> Maybe Snapshot
+    -> ReadOptions
     -> key
     -> key
     -> ConduitT () (key, value) m ()
-matchingSkip db snapshot base start = do
-    let opts = defaultReadOptions {useSnapshot = snapshot}
+matchingSkip db opts base start =
     withIterator db opts $ \it -> do
         iterSeek it (encode start)
         matchRecursive base it
@@ -146,11 +143,11 @@ firstMatching ::
        , Serialize value
        )
     => DB
-    -> Maybe Snapshot
+    -> ReadOptions
     -> key
     -> m (Maybe (key, value))
-firstMatching db snapshot base =
-    runResourceT . runConduit $ matching db snapshot base .| headC
+firstMatching db opts base =
+    runResourceT . runConduit $ matching db opts base .| headC
 
 -- | Like 'matchingSkip', but return the first element only.
 firstMatchingSkip ::
@@ -160,13 +157,13 @@ firstMatchingSkip ::
        , Serialize value
        )
     => DB
-    -> Maybe Snapshot
+    -> ReadOptions
     -> key
     -> key
     -> m (Maybe (key, value))
-firstMatchingSkip db snapshot base start =
+firstMatchingSkip db opts base start =
     runResourceT . runConduit $
-    matchingSkip db snapshot base start .| headC
+    matchingSkip db opts base start .| headC
 
 -- | Like 'matching' but return a list.
 matchingAsList ::
@@ -176,12 +173,12 @@ matchingAsList ::
        , Serialize value
        )
     => DB
-    -> Maybe Snapshot
+    -> ReadOptions
     -> key
     -> m [(key, value)]
-matchingAsList db snapshot base =
+matchingAsList db opts base =
     runResourceT . runConduit $
-    matching db snapshot base .| sinkList
+    matching db opts base .| sinkList
 
 -- | Like 'matchingSkip', but return a list.
 matchingSkipAsList ::
@@ -191,10 +188,10 @@ matchingSkipAsList ::
        , Serialize value
        )
     => DB
-    -> Maybe Snapshot
+    -> ReadOptions
     -> key
     -> key
     -> m [(key, value)]
-matchingSkipAsList db snapshot base start =
+matchingSkipAsList db opts base start =
     runResourceT . runConduit $
-    matchingSkip db snapshot base start .| sinkList
+    matchingSkip db opts base start .| sinkList
