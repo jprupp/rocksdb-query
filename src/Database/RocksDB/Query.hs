@@ -1,5 +1,15 @@
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-|
+Module      : Database.RocksDB.Query
+Copyright   : No rights reserved
+License     : UNLICENSE
+Maintainer  : xenog@protonmail.com
+Stability   : experimental
+Portability : POSIX
+
+Query functions to make interaction with RocksDB stores easier and safer.
+-}
 module Database.RocksDB.Query where
 
 import           Conduit
@@ -8,7 +18,10 @@ import           Data.Serialize   as S
 import           Database.RocksDB as R
 import           UnliftIO
 
+-- | Class for types that are database keys.
 class Key key
+
+-- | Class for types that are corresponding database key and value.
 class KeyValue key value
 
 -- | Read a value from the database, or 'Nothing' if not found.
@@ -26,6 +39,7 @@ retrieve db opts key =
                 Left e  -> throwString e
                 Right x -> return (Just x)
 
+-- | Internal function for recursively matching a key.
 matchRecursive ::
        ( MonadIO m
        , KeyValue key value
