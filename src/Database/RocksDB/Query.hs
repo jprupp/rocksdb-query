@@ -48,7 +48,7 @@ matchRecursive ::
        )
     => key
     -> Iterator
-    -> ConduitT () (key, value) m ()
+    -> ConduitT i (key, value) m ()
 matchRecursive base it =
     iterEntry it >>= \case
         Nothing -> return ()
@@ -96,7 +96,7 @@ matching ::
     => DB
     -> ReadOptions
     -> key
-    -> ConduitT () (key, value) m ()
+    -> ConduitT i (key, value) m ()
 matching db opts base =
     withIterator db opts $ \it -> do
         iterSeek it (encode base)
@@ -114,7 +114,7 @@ matchingSkip ::
     -> ReadOptions
     -> key
     -> key
-    -> ConduitT () (key, value) m ()
+    -> ConduitT i (key, value) m ()
 matchingSkip db opts base start =
     withIterator db opts $ \it -> do
         iterSeek it (encode start)
