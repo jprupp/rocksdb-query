@@ -1,10 +1,10 @@
 name:                rocksdb-query
-version:             0.3.0
-github:              "xenog/rocksdb-query"
+version:             0.3.1
+github:              "jprupp/rocksdb-query"
 license:             PublicDomain
 license-file:        UNLICENSE
 author:              "Jean-Pierre Rupp"
-maintainer:          "xenog@protonmail.com"
+maintainer:          "jprupp@protonmail.ch"
 copyright:           "No Rights Reserved"
 
 extra-source-files:
@@ -18,7 +18,7 @@ category:            Database
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/xenog/rocksdb-query#readme>
+description:         Please see the README on GitHub at <https://github.com/jprupp/rocksdb-query#readme>
 
 dependencies:
   - base >= 4.7 && < 5

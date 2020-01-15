@@ -39,6 +39,26 @@ retrieve db opts key =
                 Left e  -> throwString e
                 Right x -> return (Just x)
 
+matchRecursiveList ::
+     (MonadIO m, KeyValue key value, Serialize key, Serialize value)
+  => key
+  -> Iterator
+  -> m [(key, value)]
+matchRecursiveList base it = go
+  where
+    go =
+      iterEntry it >>= \case
+        Nothing -> return []
+        Just (key_bytes, value_bytes) -> do
+          if base_bytes `B.isPrefixOf` key_bytes
+            then do
+              key <- either throwString return (decode key_bytes)
+              value <- either throwString return (decode value_bytes)
+              iterNext it
+              ((key, value) :) <$> go
+            else return []
+    base_bytes = encode base
+
 -- | Internal function for recursively matching a key.
 matchRecursive ::
        ( MonadIO m
@@ -49,20 +69,20 @@ matchRecursive ::
     => key
     -> Iterator
     -> ConduitT i (key, value) m ()
-matchRecursive base it =
-    iterEntry it >>= \case
+matchRecursive base it = go
+  where
+    go =
+      iterEntry it >>= \case
         Nothing -> return ()
         Just (key_bytes, value_bytes) -> do
-            let start_bytes = B.take (B.length base_bytes) key_bytes
-            if start_bytes /= base_bytes
-                then return ()
-                else do
-                    key <- either throwString return (decode key_bytes)
-                    value <- either throwString return (decode value_bytes)
-                    yield (key, value)
-                    iterNext it
-                    matchRecursive base it
-  where
+          if base_bytes `B.isPrefixOf` key_bytes
+            then do
+              key <- either throwString return (decode key_bytes)
+              value <- either throwString return (decode value_bytes)
+              yield (key, value)
+              iterNext it
+              go
+            else return ()
     base_bytes = encode base
 
 -- | Pass a short key to filter all the elements whose key prefix match it. Use
@@ -191,8 +211,9 @@ matchingAsList ::
     -> key
     -> m [(key, value)]
 matchingAsList db opts base =
-    runResourceT . runConduit $
-    matching db opts base .| sinkList
+  runResourceT . withIterator db opts $ \it -> do
+    iterSeek it (encode base)
+    matchRecursiveList base it
 
 -- | Like 'matchingSkip', but return a list.
 matchingSkipAsList ::
@@ -207,5 +228,6 @@ matchingSkipAsList ::
     -> key
     -> m [(key, value)]
 matchingSkipAsList db opts base start =
-    runResourceT . runConduit $
-    matchingSkip db opts base start .| sinkList
+  runResourceT . withIterator db opts $ \it -> do
+    iterSeek it (encode start)
+    matchRecursiveList base it
