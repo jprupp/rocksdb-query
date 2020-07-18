@@ -13,6 +13,7 @@ Query functions to make interaction with RocksDB stores easier and safer.
 module Database.RocksDB.Query where
 
 import           Conduit
+import           Control.Monad
 import qualified Data.ByteString  as B
 import           Data.Serialize   as S
 import           Database.RocksDB as R
@@ -28,11 +29,11 @@ class KeyValue key value
 retrieve ::
        (MonadIO m, KeyValue key value, Serialize key, Serialize value)
     => DB
-    -> ReadOptions
+    -> ReadOpts
     -> key
     -> m (Maybe value)
 retrieve db opts key =
-    R.get db opts (encode key) >>= \case
+    R.getReadOpts db opts (encode key) >>= \case
         Nothing -> return Nothing
         Just bytes ->
             case decode bytes of
@@ -46,17 +47,16 @@ matchRecursiveList ::
   -> m [(key, value)]
 matchRecursiveList base it = go
   where
-    go =
-      iterEntry it >>= \case
+    go = iterEntry it >>= \case
         Nothing -> return []
-        Just (key_bytes, value_bytes) -> do
+        Just (key_bytes, value_bytes) ->
           if base_bytes `B.isPrefixOf` key_bytes
-            then do
-              key <- either throwString return (decode key_bytes)
-              value <- either throwString return (decode value_bytes)
-              iterNext it
-              ((key, value) :) <$> go
-            else return []
+              then do
+                  key <- either throwString return (decode key_bytes)
+                  value <- either throwString return (decode value_bytes)
+                  iterNext it
+                  ((key, value) :) <$> go
+              else return []
     base_bytes = encode base
 
 -- | Internal function for recursively matching a key.
@@ -74,15 +74,13 @@ matchRecursive base it = go
     go =
       iterEntry it >>= \case
         Nothing -> return ()
-        Just (key_bytes, value_bytes) -> do
-          if base_bytes `B.isPrefixOf` key_bytes
-            then do
-              key <- either throwString return (decode key_bytes)
-              value <- either throwString return (decode value_bytes)
-              yield (key, value)
-              iterNext it
-              go
-            else return ()
+        Just (key_bytes, value_bytes) ->
+            when (base_bytes `B.isPrefixOf` key_bytes) $ do
+                key <- either throwString return (decode key_bytes)
+                value <- either throwString return (decode value_bytes)
+                yield (key, value)
+                iterNext it
+                go
     base_bytes = encode base
 
 -- | Pass a short key to filter all the elements whose key prefix match it. Use
@@ -114,13 +112,13 @@ matching ::
        , Serialize value
        )
     => DB
-    -> ReadOptions
+    -> ReadOpts
     -> key
     -> ConduitT i (key, value) m ()
-matching db opts base =
-    withIterator db opts $ \it -> do
-        iterSeek it (encode base)
-        matchRecursive base it
+matching db opts base = do
+    it <- createIter db opts
+    iterSeek it (encode base)
+    matchRecursive base it
 
 -- | Like 'matching', but skip to the second key passed as argument, or after if
 -- there is no entry for the second key.
@@ -131,14 +129,14 @@ matchingSkip ::
        , Serialize value
        )
     => DB
-    -> ReadOptions
+    -> ReadOpts
     -> key
     -> key
     -> ConduitT i (key, value) m ()
-matchingSkip db opts base start =
-    withIterator db opts $ \it -> do
-        iterSeek it (encode start)
-        matchRecursive base it
+matchingSkip db opts base start = do
+    it <- createIter db opts
+    iterSeek it (encode start)
+    matchRecursive base it
 
 -- | Insert a record into the database.
 insert ::
@@ -147,11 +145,11 @@ insert ::
     -> key
     -> value
     -> m ()
-insert db key value = R.put db defaultWriteOptions (encode key) (encode value)
+insert db key value = R.put db (encode key) (encode value)
 
 -- | Delete a record from the database.
 remove :: (MonadIO m, Key key, Serialize key) => DB -> key -> m ()
-remove db key = delete db defaultWriteOptions (encode key)
+remove db key = delete db (encode key)
 
 -- | Get the 'BatchOp' to insert a record in the database.
 insertOp ::
@@ -166,8 +164,8 @@ deleteOp :: (Key key, Serialize key) => key -> BatchOp
 deleteOp key = Del (encode key)
 
 -- | Write a batch to the database.
-writeBatch :: MonadIO m => DB -> WriteBatch -> m ()
-writeBatch db = write db defaultWriteOptions
+writeBatch :: MonadIO m => DB -> [BatchOp] -> m ()
+writeBatch = write
 
 -- | Like 'matching' but return the first element only.
 firstMatching ::
@@ -177,7 +175,7 @@ firstMatching ::
        , Serialize value
        )
     => DB
-    -> ReadOptions
+    -> ReadOpts
     -> key
     -> m (Maybe (key, value))
 firstMatching db opts base =
@@ -191,7 +189,7 @@ firstMatchingSkip ::
        , Serialize value
        )
     => DB
-    -> ReadOptions
+    -> ReadOpts
     -> key
     -> key
     -> m (Maybe (key, value))
@@ -207,11 +205,11 @@ matchingAsList ::
        , Serialize value
        )
     => DB
-    -> ReadOptions
+    -> ReadOpts
     -> key
     -> m [(key, value)]
-matchingAsList db opts base =
-  runResourceT . withIterator db opts $ \it -> do
+matchingAsList db opts base = do
+    it <- createIter db opts
     iterSeek it (encode base)
     matchRecursiveList base it
 
@@ -223,11 +221,11 @@ matchingSkipAsList ::
        , Serialize value
        )
     => DB
-    -> ReadOptions
+    -> ReadOpts
     -> key
     -> key
     -> m [(key, value)]
-matchingSkipAsList db opts base start =
-  runResourceT . withIterator db opts $ \it -> do
+matchingSkipAsList db opts base start = do
+    it <- createIter db opts
     iterSeek it (encode start)
     matchRecursiveList base it

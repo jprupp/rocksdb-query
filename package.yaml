@@ -1,5 +1,5 @@
 name:                rocksdb-query
-version:             0.3.2
+version:             0.4.0
 github:              "jprupp/rocksdb-query"
 license:             MIT
 license-file:        LICENSE
@@ -19,7 +19,7 @@ dependencies:
   - base >= 4.7 && < 5
   - cereal
   - unliftio
-  - rocksdb-haskell
+  - rocksdb-haskell-jprupp
 
 library:
   source-dirs: src

@@ -2,3 +2,6 @@ resolver: lts-16.0
 nix:
   packages:
     - rocksdb
+extra-deps:
+  - github: jprupp/rocksdb-haskell
+    commit: c7b6c452d5de7e0df4961e06642123c2374819ac

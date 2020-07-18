@@ -3,7 +3,18 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    size: 10893
+    url: https://github.com/jprupp/rocksdb-haskell/archive/c7b6c452d5de7e0df4961e06642123c2374819ac.tar.gz
+    name: rocksdb-haskell-jprupp
+    version: 2.0.0
+    sha256: 1dc262e25d5863886629bd2bd5934367e0f00a81a655a5f221de85092132a73d
+    pantry-tree:
+      size: 867
+      sha256: cb9351d772e3ec7cec74c418d760283fc368a6986364a6803b59a153524fbf2f
+  original:
+    url: https://github.com/jprupp/rocksdb-haskell/archive/c7b6c452d5de7e0df4961e06642123c2374819ac.tar.gz
 snapshots:
 - completed:
     size: 531237

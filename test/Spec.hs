@@ -71,7 +71,8 @@ main =
   where
     setup f =
         withSystemTempDirectory "rocksdb-query-test-" $ \d -> do
-            db <- open d defaultOptions {createIfMissing = True}
+            opts <- newOptions def {createIfMissing = True}
+            db <- open d opts
             insertTestRecords db
             hspec $ f db
 
