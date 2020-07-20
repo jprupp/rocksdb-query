@@ -29,11 +29,10 @@ class KeyValue key value
 retrieve ::
        (MonadIO m, KeyValue key value, Serialize key, Serialize value)
     => DB
-    -> ReadOpts
     -> key
     -> m (Maybe value)
-retrieve db opts key =
-    R.getReadOpts db opts (encode key) >>= \case
+retrieve db key =
+    R.get db (encode key) >>= \case
         Nothing -> return Nothing
         Just bytes ->
             case decode bytes of
@@ -106,35 +105,31 @@ matchRecursive base it = go
 -- the 'Serialize' instance for @MyKey@ only understands how to deserialize a
 -- @FullKey@, then that is what is returned.
 matching ::
-       ( MonadResource m
+       ( MonadIO m
        , KeyValue key value
        , Serialize key
        , Serialize value
        )
-    => DB
-    -> ReadOpts
+    => Iterator
     -> key
     -> ConduitT i (key, value) m ()
-matching db opts base = do
-    it <- createIter db opts
+matching it base = do
     iterSeek it (encode base)
     matchRecursive base it
 
 -- | Like 'matching', but skip to the second key passed as argument, or after if
 -- there is no entry for the second key.
 matchingSkip ::
-       ( MonadResource m
+       ( MonadIO m
        , KeyValue key value
        , Serialize key
        , Serialize value
        )
-    => DB
-    -> ReadOpts
+    => Iterator
     -> key
     -> key
     -> ConduitT i (key, value) m ()
-matchingSkip db opts base start = do
-    it <- createIter db opts
+matchingSkip it base start = do
     iterSeek it (encode start)
     matchRecursive base it
 
@@ -175,11 +170,10 @@ firstMatching ::
        , Serialize value
        )
     => DB
-    -> ReadOpts
     -> key
     -> m (Maybe (key, value))
-firstMatching db opts base =
-    runResourceT . runConduit $ matching db opts base .| headC
+firstMatching db base =
+    withIter db $ \it -> runConduit $ matching it base .| headC
 
 -- | Like 'matchingSkip', but return the first element only.
 firstMatchingSkip ::
@@ -189,13 +183,12 @@ firstMatchingSkip ::
        , Serialize value
        )
     => DB
-    -> ReadOpts
     -> key
     -> key
     -> m (Maybe (key, value))
-firstMatchingSkip db opts base start =
-    runResourceT . runConduit $
-    matchingSkip db opts base start .| headC
+firstMatchingSkip db base start =
+    withIter db $ \it -> runConduit $
+    matchingSkip it base start .| headC
 
 -- | Like 'matching' but return a list.
 matchingAsList ::
@@ -205,11 +198,10 @@ matchingAsList ::
        , Serialize value
        )
     => DB
-    -> ReadOpts
     -> key
     -> m [(key, value)]
-matchingAsList db opts base = do
-    it <- createIter db opts
+matchingAsList db base =
+    withIter db $ \it -> do
     iterSeek it (encode base)
     matchRecursiveList base it
 
@@ -221,11 +213,10 @@ matchingSkipAsList ::
        , Serialize value
        )
     => DB
-    -> ReadOpts
     -> key
     -> key
     -> m [(key, value)]
-matchingSkipAsList db opts base start = do
-    it <- createIter db opts
+matchingSkipAsList db base start =
+    withIter db $ \it -> do
     iterSeek it (encode start)
     matchRecursiveList base it

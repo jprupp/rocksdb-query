@@ -4,4 +4,4 @@ nix:
     - rocksdb
 extra-deps:
   - github: jprupp/rocksdb-haskell
-    commit: c7b6c452d5de7e0df4961e06642123c2374819ac
+    commit: e138bd26f6048c03f486da2f8a7e3d0e72f5adc0
