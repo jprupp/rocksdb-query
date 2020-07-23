@@ -31,13 +31,15 @@ retrieve ::
     => DB
     -> key
     -> m (Maybe value)
-retrieve db key =
-    R.get db (encode key) >>= \case
-        Nothing -> return Nothing
-        Just bytes ->
-            case decode bytes of
-                Left e  -> throwString e
-                Right x -> return (Just x)
+retrieve db = retrieveCommon db Nothing
+
+retrieveCF ::
+       (MonadIO m, KeyValue key value, Serialize key, Serialize value)
+    => DB
+    -> ColumnFamily
+    -> key
+    -> m (Maybe value)
+retrieveCF db cf = retrieveCommon db (Just cf)
 
 -- | Read a value from the database, or 'Nothing' if not found.
 retrieveCommon ::
