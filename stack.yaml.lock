@@ -5,16 +5,12 @@
 
 packages:
 - completed:
-    size: 10222
-    url: https://github.com/jprupp/rocksdb-haskell/archive/7bc824e8d07ed5a776735caae0b52fc1edf7286d.tar.gz
-    name: rocksdb-haskell-jprupp
-    version: 2.0.0
-    sha256: 5781abaf61832ea36c913db7d3a3aefa25d417199f269df574905caa2b392df8
+    hackage: rocksdb-haskell-jprupp-2.1.1@sha256:dc32b9aefd258f5642be7cfa7e4b1a5d327e339c1dd44877fc68648da605a33b,1703
     pantry-tree:
-      size: 916
-      sha256: 7b9c0e3887b31e0f3a8c7ac13d35c56f76c964fa9d1dffa342ccfe3b591d403a
+      size: 712
+      sha256: 2de1c132a5dc70df1a86877da0f3d59e5f1a71242498dbe0f8236a335330a4ac
   original:
-    url: https://github.com/jprupp/rocksdb-haskell/archive/7bc824e8d07ed5a776735caae0b52fc1edf7286d.tar.gz
+    hackage: rocksdb-haskell-jprupp-2.1.1
 snapshots:
 - completed:
     size: 531237

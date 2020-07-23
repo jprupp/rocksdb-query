@@ -4,10 +4,10 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 9db21bfab84b1726ca28c3398842c81f3e8d774dd4d5cde2f5667f64a52b70c9
+-- hash: b80763c5cc5ac5d920a8520a11db9cf0eb4634498bd96fe94c7bca37ca199021
 
 name:           rocksdb-query
-version:        0.4.0
+version:        0.4.1
 synopsis:       RocksDB database querying library for Haskell
 description:    Please see the README on GitHub at <https://github.com/jprupp/rocksdb-query#readme>
 category:       Database
@@ -39,7 +39,7 @@ library
     , cereal
     , conduit
     , resourcet
-    , rocksdb-haskell-jprupp
+    , rocksdb-haskell-jprupp >=2.1.1
     , unliftio
   default-language: Haskell2010
 
@@ -56,7 +56,7 @@ test-suite rocksdb-query-test
     , cereal
     , data-default
     , hspec
-    , rocksdb-haskell-jprupp
+    , rocksdb-haskell-jprupp >=2.1.1
     , rocksdb-query
     , unliftio
   default-language: Haskell2010

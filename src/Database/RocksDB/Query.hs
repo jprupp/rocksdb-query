@@ -39,6 +39,25 @@ retrieve db key =
                 Left e  -> throwString e
                 Right x -> return (Just x)
 
+-- | Read a value from the database, or 'Nothing' if not found.
+retrieveCommon ::
+       (MonadIO m, KeyValue key value, Serialize key, Serialize value)
+    => DB
+    -> Maybe ColumnFamily
+    -> key
+    -> m (Maybe value)
+retrieveCommon db mcf key =
+    f >>= \case
+        Nothing -> return Nothing
+        Just bytes ->
+            case decode bytes of
+                Left e  -> throwString e
+                Right x -> return (Just x)
+  where
+    f = case mcf of
+        Just cf -> R.getCF db cf (encode key)
+        Nothing -> R.get db (encode key)
+
 matchRecursiveList ::
      (MonadIO m, KeyValue key value, Serialize key, Serialize value)
   => key
@@ -142,9 +161,24 @@ insert ::
     -> m ()
 insert db key value = R.put db (encode key) (encode value)
 
+-- | Insert a record into the database.
+insertCF ::
+       (MonadIO m, KeyValue key value, Serialize key, Serialize value)
+    => DB
+    -> ColumnFamily
+    -> key
+    -> value
+    -> m ()
+insertCF db cf key value = R.putCF db cf (encode key) (encode value)
+
 -- | Delete a record from the database.
 remove :: (MonadIO m, Key key, Serialize key) => DB -> key -> m ()
 remove db key = delete db (encode key)
+
+-- | Delete a record from the database.
+removeCF :: (MonadIO m, Key key, Serialize key)
+         => DB -> ColumnFamily -> key -> m ()
+removeCF db cf key = deleteCF db cf (encode key)
 
 -- | Get the 'BatchOp' to insert a record in the database.
 insertOp ::
@@ -154,9 +188,22 @@ insertOp ::
     -> BatchOp
 insertOp key value = R.Put (encode key) (encode value)
 
+-- | Get the 'BatchOp' to insert a record in the database.
+insertOpCF ::
+       (KeyValue key value, Serialize key, Serialize value)
+    => ColumnFamily
+    -> key
+    -> value
+    -> BatchOp
+insertOpCF cf key value = R.PutCF cf (encode key) (encode value)
+
 -- | Get the 'BatchOp' to delete a record from the database.
 deleteOp :: (Key key, Serialize key) => key -> BatchOp
 deleteOp key = Del (encode key)
+
+-- | Get the 'BatchOp' to delete a record from the database.
+deleteOpCF :: (Key key, Serialize key) => ColumnFamily -> key -> BatchOp
+deleteOpCF cf key = DelCF cf (encode key)
 
 -- | Write a batch to the database.
 writeBatch :: MonadIO m => DB -> [BatchOp] -> m ()
@@ -175,6 +222,20 @@ firstMatching ::
 firstMatching db base =
     withIter db $ \it -> runConduit $ matching it base .| headC
 
+-- | Like 'matching' but return the first element only.
+firstMatchingCF ::
+       ( MonadUnliftIO m
+       , KeyValue key value
+       , Serialize key
+       , Serialize value
+       )
+    => DB
+    -> ColumnFamily
+    -> key
+    -> m (Maybe (key, value))
+firstMatchingCF db cf base =
+    withIterCF db cf $ \it -> runConduit $ matching it base .| headC
+
 -- | Like 'matchingSkip', but return the first element only.
 firstMatchingSkip ::
        ( MonadUnliftIO m
@@ -188,6 +249,22 @@ firstMatchingSkip ::
     -> m (Maybe (key, value))
 firstMatchingSkip db base start =
     withIter db $ \it -> runConduit $
+    matchingSkip it base start .| headC
+
+-- | Like 'matchingSkip', but return the first element only.
+firstMatchingSkipCF ::
+       ( MonadUnliftIO m
+       , KeyValue key value
+       , Serialize key
+       , Serialize value
+       )
+    => DB
+    -> ColumnFamily
+    -> key
+    -> key
+    -> m (Maybe (key, value))
+firstMatchingSkipCF db cf base start =
+    withIterCF db cf $ \it -> runConduit $
     matchingSkip it base start .| headC
 
 -- | Like 'matching' but return a list.
@@ -205,6 +282,22 @@ matchingAsList db base =
     iterSeek it (encode base)
     matchRecursiveList base it
 
+-- | Like 'matching' but return a list.
+matchingAsListCF ::
+       ( MonadUnliftIO m
+       , KeyValue key value
+       , Serialize key
+       , Serialize value
+       )
+    => DB
+    -> ColumnFamily
+    -> key
+    -> m [(key, value)]
+matchingAsListCF db cf base =
+    withIterCF db cf $ \it -> do
+    iterSeek it (encode base)
+    matchRecursiveList base it
+
 -- | Like 'matchingSkip', but return a list.
 matchingSkipAsList ::
        ( MonadUnliftIO m
@@ -218,5 +311,22 @@ matchingSkipAsList ::
     -> m [(key, value)]
 matchingSkipAsList db base start =
     withIter db $ \it -> do
+    iterSeek it (encode start)
+    matchRecursiveList base it
+
+-- | Like 'matchingSkip', but return a list.
+matchingSkipAsListCF ::
+       ( MonadUnliftIO m
+       , KeyValue key value
+       , Serialize key
+       , Serialize value
+       )
+    => DB
+    -> ColumnFamily
+    -> key
+    -> key
+    -> m [(key, value)]
+matchingSkipAsListCF db cf base start =
+    withIterCF db cf $ \it -> do
     iterSeek it (encode start)
     matchRecursiveList base it
