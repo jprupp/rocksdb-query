@@ -1,10 +1,10 @@
 name:                rocksdb-query
-version:             0.4.2
-github:              "jprupp/rocksdb-query"
+version:             0.4.3
+github:              jprupp/rocksdb-query
 license:             MIT
 license-file:        LICENSE
-author:              "Jean-Pierre Rupp"
-maintainer:          "jprupp@protonmail.ch"
+author:              JP Rupp
+maintainer:          jprupp@protonmail.ch
 
 extra-source-files:
   - README.md

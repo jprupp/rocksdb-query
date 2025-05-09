@@ -1,19 +1,19 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.33.0.
+-- This file has been generated from package.yaml by hpack version 0.38.0.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 9168d4dea9cbb5ba9ee1c2415d77c5a8af439e486bb3997401404c2a11b3c475
+-- hash: 399259d1d70dd1b29a3cf2d188fc5ec1a3ba82a7e55489b3bacc3d1cb2be9aaf
 
 name:           rocksdb-query
-version:        0.4.2
+version:        0.4.3
 synopsis:       RocksDB database querying library for Haskell
 description:    Please see the README on GitHub at <https://github.com/jprupp/rocksdb-query#readme>
 category:       Database
 homepage:       https://github.com/jprupp/rocksdb-query#readme
 bug-reports:    https://github.com/jprupp/rocksdb-query/issues
-author:         Jean-Pierre Rupp
+author:         JP Rupp
 maintainer:     jprupp@protonmail.ch
 license:        MIT
 license-file:   LICENSE

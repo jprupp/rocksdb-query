@@ -1,6 +1,4 @@
-resolver: lts-16.0
+resolver: lts-23.21
 nix:
   packages:
     - rocksdb
-extra-deps:
-  - rocksdb-haskell-jprupp-2.1.1
