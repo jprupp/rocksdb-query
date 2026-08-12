@@ -1,5 +1,5 @@
 name:                rocksdb-query
-version:             0.5.0
+version:             0.6.0
 github:              jprupp/rocksdb-query
 license:             MIT
 license-file:        LICENSE
@@ -18,14 +18,13 @@ description:         Please see the README on GitHub at <https://github.com/jpru
 dependencies:
   - base >= 4.7 && < 5
   - cereal
-  - rocksdb-haskell-jprupp >= 2.1.1
+  - rocksdb-haskell-jprupp >= 2.3.0
 
 library:
   source-dirs: src
   dependencies:
     - bytestring
     - conduit
-    - resourcet
 
 tests:
   rocksdb-query-test:
