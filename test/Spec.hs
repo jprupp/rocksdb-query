@@ -8,7 +8,7 @@ import           Data.Word
 import           Database.RocksDB       as R
 import           Database.RocksDB.Query
 import           Test.Hspec
-import           UnliftIO
+import           System.IO.Temp
 
 newtype KeyOne = KeyOne Word32 deriving (Show, Eq)
 data KeyTwo
@@ -74,7 +74,7 @@ main =
             insertTestRecords db
             hspec $ f db
 
-insertTestRecords :: MonadIO m => DB -> m ()
+insertTestRecords :: DB -> IO ()
 insertTestRecords db = do
     insert db (KeyOne 1) "Hello World!"
     insert db (KeyOne 2) "Hello World Again!"

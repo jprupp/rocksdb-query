@@ -3,10 +3,17 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/topics/lock_files
 
-packages: []
+packages:
+- completed:
+    hackage: rocksdb-haskell-jprupp-2.2.0@sha256:688be97f64b5553561a238d3336c07fcfe9d454562ba6eee8e03d332c0ba3544,1623
+    pantry-tree:
+      sha256: ef1103832ce6fcfb4e422fff587c90d8ce6dc98d5b21e43dcf0a98bf6e22dab1
+      size: 711
+  original:
+    hackage: rocksdb-haskell-jprupp-2.2.0@sha256:688be97f64b5553561a238d3336c07fcfe9d454562ba6eee8e03d332c0ba3544,1623
 snapshots:
 - completed:
-    sha256: f4a61482dcad21151331bf84ec85bee9be43965f143791fa4bb202ac1e443e1b
-    size: 683833
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/23/21.yaml
-  original: lts-23.21
+    sha256: f0a8c26c47051319c3acc86a8c1020c7ca995a2d454261696777ced26f74b744
+    size: 770735
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2026/8/11.yaml
+  original: nightly-2026-08-11

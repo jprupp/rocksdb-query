@@ -17,7 +17,6 @@ import           Control.Monad
 import qualified Data.ByteString  as B
 import           Data.Serialize   as S
 import           Database.RocksDB as R
-import           UnliftIO
 
 -- | Class for types that are database keys.
 class Key key
@@ -53,7 +52,7 @@ retrieveCommon db mcf key =
         Nothing -> return Nothing
         Just bytes ->
             case decode bytes of
-                Left e  -> throwString e
+                Left e  -> error e
                 Right x -> return (Just x)
   where
     f = case mcf of
@@ -61,10 +60,10 @@ retrieveCommon db mcf key =
         Nothing -> R.get db (encode key)
 
 matchRecursiveList ::
-     (MonadIO m, KeyValue key value, Serialize key, Serialize value)
+     (KeyValue key value, Serialize key, Serialize value)
   => key
   -> Iterator
-  -> m [(key, value)]
+  -> IO [(key, value)]
 matchRecursiveList base it = go
   where
     go = iterEntry it >>= \case
@@ -72,8 +71,8 @@ matchRecursiveList base it = go
         Just (key_bytes, value_bytes) ->
           if base_bytes `B.isPrefixOf` key_bytes
               then do
-                  key <- either throwString return (decode key_bytes)
-                  value <- either throwString return (decode value_bytes)
+                  key <- either error return (decode key_bytes)
+                  value <- either error return (decode value_bytes)
                   iterNext it
                   ((key, value) :) <$> go
               else return []
@@ -81,25 +80,24 @@ matchRecursiveList base it = go
 
 -- | Internal function for recursively matching a key.
 matchRecursive ::
-       ( MonadIO m
-       , KeyValue key value
+       ( KeyValue key value
        , Serialize key
        , Serialize value
        )
     => key
     -> Iterator
-    -> ConduitT i (key, value) m ()
+    -> ConduitT i (key, value) IO ()
 matchRecursive base it = go
   where
     go =
-      iterEntry it >>= \case
+      liftIO (iterEntry it) >>= \case
         Nothing -> return ()
         Just (key_bytes, value_bytes) ->
             when (base_bytes `B.isPrefixOf` key_bytes) $ do
-                key <- either throwString return (decode key_bytes)
-                value <- either throwString return (decode value_bytes)
+                key <- either error return (decode key_bytes)
+                value <- either error return (decode value_bytes)
                 yield (key, value)
-                iterNext it
+                liftIO (iterNext it)
                 go
     base_bytes = encode base
 
@@ -126,32 +124,30 @@ matchRecursive base it = go
 -- the 'Serialize' instance for @MyKey@ only understands how to deserialize a
 -- @FullKey@, then that is what is returned.
 matching ::
-       ( MonadIO m
-       , KeyValue key value
+       ( KeyValue key value
        , Serialize key
        , Serialize value
        )
     => Iterator
     -> key
-    -> ConduitT i (key, value) m ()
+    -> ConduitT i (key, value) IO ()
 matching it base = do
-    iterSeek it (encode base)
+    liftIO (iterSeek it (encode base))
     matchRecursive base it
 
 -- | Like 'matching', but skip to the second key passed as argument, or after if
 -- there is no entry for the second key.
 matchingSkip ::
-       ( MonadIO m
-       , KeyValue key value
+       ( KeyValue key value
        , Serialize key
        , Serialize value
        )
     => Iterator
     -> key
     -> key
-    -> ConduitT i (key, value) m ()
+    -> ConduitT i (key, value) IO ()
 matchingSkip it base start = do
-    iterSeek it (encode start)
+    liftIO (iterSeek it (encode start))
     matchRecursive base it
 
 -- | Insert a record into the database.
@@ -213,50 +209,46 @@ writeBatch = write
 
 -- | Like 'matching' but return the first element only.
 firstMatching ::
-       ( MonadUnliftIO m
-       , KeyValue key value
+       ( KeyValue key value
        , Serialize key
        , Serialize value
        )
     => DB
     -> key
-    -> m (Maybe (key, value))
+    -> IO (Maybe (key, value))
 firstMatching db base =
     withIter db $ \it -> runConduit $ matching it base .| headC
 
 -- | Like 'matching' but return the first element only.
 firstMatchingCF ::
-       ( MonadUnliftIO m
-       , KeyValue key value
+       ( KeyValue key value
        , Serialize key
        , Serialize value
        )
     => DB
     -> ColumnFamily
     -> key
-    -> m (Maybe (key, value))
+    -> IO (Maybe (key, value))
 firstMatchingCF db cf base =
     withIterCF db cf $ \it -> runConduit $ matching it base .| headC
 
 -- | Like 'matchingSkip', but return the first element only.
 firstMatchingSkip ::
-       ( MonadUnliftIO m
-       , KeyValue key value
+       ( KeyValue key value
        , Serialize key
        , Serialize value
        )
     => DB
     -> key
     -> key
-    -> m (Maybe (key, value))
+    -> IO (Maybe (key, value))
 firstMatchingSkip db base start =
     withIter db $ \it -> runConduit $
     matchingSkip it base start .| headC
 
 -- | Like 'matchingSkip', but return the first element only.
 firstMatchingSkipCF ::
-       ( MonadUnliftIO m
-       , KeyValue key value
+       ( KeyValue key value
        , Serialize key
        , Serialize value
        )
@@ -264,21 +256,20 @@ firstMatchingSkipCF ::
     -> ColumnFamily
     -> key
     -> key
-    -> m (Maybe (key, value))
+    -> IO (Maybe (key, value))
 firstMatchingSkipCF db cf base start =
     withIterCF db cf $ \it -> runConduit $
     matchingSkip it base start .| headC
 
 -- | Like 'matching' but return a list.
 matchingAsList ::
-       ( MonadUnliftIO m
-       , KeyValue key value
+       ( KeyValue key value
        , Serialize key
        , Serialize value
        )
     => DB
     -> key
-    -> m [(key, value)]
+    -> IO [(key, value)]
 matchingAsList db base =
     withIter db $ \it -> do
     iterSeek it (encode base)
@@ -286,15 +277,14 @@ matchingAsList db base =
 
 -- | Like 'matching' but return a list.
 matchingAsListCF ::
-       ( MonadUnliftIO m
-       , KeyValue key value
+       ( KeyValue key value
        , Serialize key
        , Serialize value
        )
     => DB
     -> ColumnFamily
     -> key
-    -> m [(key, value)]
+    -> IO [(key, value)]
 matchingAsListCF db cf base =
     withIterCF db cf $ \it -> do
     iterSeek it (encode base)
@@ -302,15 +292,14 @@ matchingAsListCF db cf base =
 
 -- | Like 'matchingSkip', but return a list.
 matchingSkipAsList ::
-       ( MonadUnliftIO m
-       , KeyValue key value
+       ( KeyValue key value
        , Serialize key
        , Serialize value
        )
     => DB
     -> key
     -> key
-    -> m [(key, value)]
+    -> IO [(key, value)]
 matchingSkipAsList db base start =
     withIter db $ \it -> do
     iterSeek it (encode start)
@@ -318,8 +307,7 @@ matchingSkipAsList db base start =
 
 -- | Like 'matchingSkip', but return a list.
 matchingSkipAsListCF ::
-       ( MonadUnliftIO m
-       , KeyValue key value
+       ( KeyValue key value
        , Serialize key
        , Serialize value
        )
@@ -327,7 +315,7 @@ matchingSkipAsListCF ::
     -> ColumnFamily
     -> key
     -> key
-    -> m [(key, value)]
+    -> IO [(key, value)]
 matchingSkipAsListCF db cf base start =
     withIterCF db cf $ \it -> do
     iterSeek it (encode start)
