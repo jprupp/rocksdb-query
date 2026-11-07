@@ -5,15 +5,15 @@
 
 packages:
 - completed:
-    hackage: rocksdb-haskell-jprupp-2.3.0@sha256:ce2aaf7dd26114c489213e4089c719651550259cad42eb1b2317f2662bb3029d,1589
+    hackage: rocksdb-haskell-jprupp-2.6.1@sha256:b97e92f311865e12242868ec8dcc53a66a96da489b4cd9996be3b5893c9d5e6a,1589
     pantry-tree:
-      sha256: 6cbad8da561372c2e016fefba73f0034cc1429377df2c01c0661ab85bbe92f59
-      size: 711
+      sha256: 14453887f9c9836a22ced79318a72e89fdd4f348fd3342afddb107b4fae8d87a
+      size: 718
   original:
-    hackage: rocksdb-haskell-jprupp-2.3.0
+    hackage: rocksdb-haskell-jprupp-2.6.1
 snapshots:
 - completed:
-    sha256: f0a8c26c47051319c3acc86a8c1020c7ca995a2d454261696777ced26f74b744
-    size: 770735
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2026/8/11.yaml
-  original: nightly-2026-08-11
+    sha256: 2c234e9f6c9b52dbbd8e0c369dd55e275f1c143474d4a984a000588d37306e2c
+    size: 780950
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/nightly/2026/11/7.yaml
+  original: nightly-2026-11-07
