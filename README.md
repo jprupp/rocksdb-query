@@ -21,8 +21,11 @@ three things:
 
 ## Contents
 
+- [Why rocksdb-query](#why-rocksdb-query)
+- [Design principles](#design-principles)
 - [Installation](#installation)
 - [Quick start](#quick-start)
+- [Tutorial: modelling a schema](#tutorial-modelling-a-schema)
 - [Concepts](#concepts)
 - [Usage guide](#usage-guide)
 - [API overview](#api-overview)
@@ -30,6 +33,41 @@ three things:
 - [Development](#development)
 - [Related projects](#related-projects)
 - [License](#license)
+
+## Why rocksdb-query
+
+RocksDB is a key-value store of bytes. Real programs store records, and the code
+in between is repetitive: encode the key, call `get`, decode the value, and
+remember which kind of value lives under which kind of key. That last part is
+where bugs hide. If you read a key as the wrong type, the bytes may still
+decode, into nonsense, and you find out much later.
+
+rocksdb-query turns that knowledge into types. You declare once that orders live
+under order keys, and from then on the compiler checks every read and write.
+It also gives you prefix queries, which is how a key-value store answers
+questions like "all the orders of this customer" without a query language.
+
+It was written for [Haskoin](https://github.com/jprupp/haskoin-store), whose
+indices of the Bitcoin block chain are all modelled this way. It is small on
+purpose: about thirty functions, all thin wrappers over
+[rocksdb-haskell-jprupp](https://github.com/jprupp/rocksdb-haskell).
+
+## Design principles
+
+- **The schema is in the types.** A `KeyValue key value` instance says what is
+  stored under a key type. Reads and writes that disagree do not compile.
+- **You own the bytes.** Serialization is a `Serialize` instance that you
+  control. That matters, because the byte order of keys decides what a prefix
+  query returns and in which order.
+- **Sorted keys instead of indices.** RocksDB has no secondary indices. A key
+  that starts with what you look records up by turns a lookup into a seek and a
+  short scan. Prefix queries make that pattern a one-liner.
+- **Corrupt data is a bug.** If your program cannot decode data it wrote, it
+  stops with `error` instead of handing you a `Left` to ignore. Carrying on
+  would only spread the damage.
+- **Stay thin.** Opening, tuning, snapshots and iterators remain
+  `rocksdb-haskell-jprupp`'s job. This library adds types, not a new way to use
+  RocksDB.
 
 ## Installation
 
@@ -43,6 +81,22 @@ sudo apt-get install librocksdb-dev   # Debian and Ubuntu
 sudo dnf install rocksdb-devel        # Fedora
 brew install rocksdb                  # macOS with Homebrew
 ```
+
+### Step by step with Stack
+
+1. Install [Stack](https://docs.haskellstack.org/) and RocksDB (above).
+2. Create a project and enter it:
+
+   ```sh
+   stack new orders simple
+   cd orders
+   ```
+
+3. Add `cereal`, `data-default`, `rocksdb-haskell-jprupp` and `rocksdb-query`
+   to `build-depends` in `orders.cabal`.
+4. Put the [quick start](#quick-start) program in `src/Main.hs` and run it with
+   `stack run`. It creates a database in `/tmp/orders` and prints the records it
+   reads back.
 
 ### With Cabal
 
@@ -122,6 +176,83 @@ main = withDB "/tmp/orders" def {createIfMissing = True} $ \db -> do
 
   remove db (OrderKey 2 200)
 ```
+
+## Tutorial: modelling a schema
+
+A small library system stores books and loans. This tutorial goes through the
+decisions behind its keys.
+
+### 1. List the questions
+
+Before writing any type, list how the data will be read:
+
+- get a book by its id;
+- list the loans of a member, newest first;
+- list every book on a shelf.
+
+Each question becomes a key whose leading fields are what you look things up
+by.
+
+### 2. One tag byte per key type
+
+The keys share one column family, so each type starts with its own byte, which
+guarantees that a prefix of one type never matches keys of another:
+
+```haskell
+data BookKey = BookKey Word32 -- book id
+
+instance Serialize BookKey where
+  put (BookKey b) = putWord8 0x01 >> put b
+  get = getWord8 >>= guard . (== 0x01) >> BookKey <$> get
+
+instance Key BookKey
+instance KeyValue BookKey Book
+```
+
+### 3. Keys that sort the way you read
+
+Loans are listed per member, newest first. The key starts with the member, then
+an inverted time, so that a larger time sorts first:
+
+```haskell
+data LoanKey
+  = LoanKey Word32 Word64 Word32 -- member, maxBound - time, book
+  | LoanKeyS Word32 -- member only
+
+instance Serialize LoanKey where
+  put (LoanKey m t b) = putWord8 0x02 >> put m >> put t >> put b
+  put (LoanKeyS m) = putWord8 0x02 >> put m
+  get = getWord8 >>= guard . (== 0x02) >> LoanKey <$> get <*> get <*> get
+
+instance Key LoanKey
+instance KeyValue LoanKey ()
+```
+
+The value is `()`: everything is in the key. That is common for indices.
+
+### 4. Keep data and indices in step
+
+A loan changes the book and adds an index entry. Write both in one batch, so a
+crash can never leave one without the other:
+
+```haskell
+lend :: DB -> Word32 -> Word32 -> Word64 -> Book -> IO ()
+lend db member book now b =
+  writeBatch db
+    [ insertOp (BookKey book) b {onLoan = True},
+      insertOp (LoanKey member (maxBound - now) book) ()
+    ]
+```
+
+### 5. Read
+
+```haskell
+loans <- matchingAsList db (LoanKeyS member)    -- newest first
+page2 <- take 20 <$> matchingSkipAsList db (LoanKeyS member) lastKey
+```
+
+The same approach answers the shelf question with a `ShelfKey shelf book`
+index.
 
 ## Concepts
 

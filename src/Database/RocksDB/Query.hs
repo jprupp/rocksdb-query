@@ -12,6 +12,40 @@
 --
 -- Query functions to make interaction with RocksDB stores easier and safer.
 --
+-- = Purpose
+--
+-- RocksDB stores bytes. A program stores records: users, orders,
+-- transactions. Between the two sits a lot of repetitive and error-prone code
+-- that encodes keys, decodes values, and remembers which kind of value lives
+-- under which kind of key. Getting that last part wrong is a silent bug: the
+-- bytes decode into nonsense, or into the wrong record, long after they were
+-- written.
+--
+-- This module removes that code and makes the mapping from key types to value
+-- types something the compiler checks. It is deliberately small, and leaves
+-- opening, tuning and closing the database to "Database.RocksDB".
+--
+-- = Design
+--
+-- * __Types describe the schema.__ A key type and the instance
+--   @'KeyValue' Key Value@ together say what is stored where. Reading a key as
+--   a type you did not declare for it does not compile.
+--
+-- * __Serialization is cereal.__ Its encodings of fixed-width unsigned
+--   integers are big-endian, so numeric key parts sort numerically, which makes
+--   range scans work. You keep full control over the bytes by writing the
+--   'Serialize' instance yourself when the order matters.
+--
+-- * __Prefix queries are the main way to read sets.__ RocksDB has no
+--   secondary indices or queries, but it keeps keys sorted. A schema whose keys
+--   start with what you look records up by turns "all orders of a customer"
+--   into one seek and a short scan.
+--
+-- * __Corrupt data is a bug, not an outcome.__ Decoding failures call 'error'
+--   rather than returning 'Maybe' or 'Either'. If data written by your own
+--   program cannot be read back, the program is wrong, and carrying on would
+--   only spread the damage.
+--
 -- Keys and values are Haskell types with 'Serialize' instances from the
 -- @cereal@ package. They are encoded with 'encode' before being written and
 -- decoded with 'decode' after being read. The empty classes 'Key' and
@@ -57,11 +91,18 @@ import Database.RocksDB as R
 -- | Class for types that are database keys. It has no methods; an instance
 -- marks a type as allowed to be used as a key in 'remove', 'deleteOp' and
 -- related functions.
+--
+-- Deletion needs to know only that a type is a key, not what it maps to, which
+-- is why it is a separate class.
 class Key key
 
 -- | Class for types that are corresponding database key and value. It has no
 -- methods; an instance states that values of type @value@ are stored under keys
 -- of type @key@. Functions that read or write values require it.
+--
+-- The class has no methods because its job is purely to be checked by the
+-- compiler: it records a decision about your schema in a place where every read
+-- and write must agree with it.
 class KeyValue key value
 
 -- | Read a value from the default column family, or 'Nothing' if not found.
@@ -177,6 +218,10 @@ matchRecursive base it = go
 -- prefix. The iterator must stay open while the conduit runs. See
 -- 'matchingAsList' and 'firstMatching' for versions that manage the iterator
 -- themselves.
+--
+-- The conduit version exists for sets too large to hold in memory, and for
+-- consumers that stop early: only the entries that are actually consumed are read
+-- from the database.
 matching ::
   ( KeyValue key value,
     Serialize key,
@@ -196,6 +241,10 @@ matching it base = do
 -- (or the key just after it) as the second argument. The second key should
 -- start with the same prefix as the first; if it sorts before the prefix, no
 -- entries are returned.
+--
+-- Starting from a key instead of an offset is what makes deep pagination cheap:
+-- the database seeks straight to the page instead of reading and discarding
+-- every entry before it.
 matchingSkip ::
   ( KeyValue key value,
     Serialize key,
