@@ -4,13 +4,82 @@
 
 -- |
 -- Module      : Database.RocksDB.Query
--- Copyright   : No rights reserved
--- License     : UNLICENSE
--- Maintainer  : xenog@protonmail.com
+-- Copyright   : Haskoin Developers
+-- License     : MIT
+-- Maintainer  : jprupp@protonmail.ch
 -- Stability   : experimental
 -- Portability : POSIX
 --
 -- Query functions to make interaction with RocksDB stores easier and safer.
+--
+-- = Purpose
+--
+-- RocksDB stores bytes. A program stores records: users, orders,
+-- transactions. Between the two sits a lot of repetitive and error-prone code
+-- that encodes keys, decodes values, and remembers which kind of value lives
+-- under which kind of key. Getting that last part wrong is a silent bug: the
+-- bytes decode into nonsense, or into the wrong record, long after they were
+-- written.
+--
+-- This module removes that code and makes the mapping from key types to value
+-- types something the compiler checks. It is deliberately small, and leaves
+-- opening, tuning and closing the database to "Database.RocksDB".
+--
+-- = Design
+--
+-- * __Types describe the schema.__ A key type and the instance
+--   @'KeyValue' Key Value@ together say what is stored where. Reading a key as
+--   a type you did not declare for it does not compile.
+--
+-- * __Serialization is cereal.__ Its encodings of fixed-width unsigned
+--   integers are big-endian, so numeric key parts sort numerically, which makes
+--   range scans work. You keep full control over the bytes by writing the
+--   'Serialize' instance yourself when the order matters.
+--
+-- * __Prefix queries are the main way to read sets.__ RocksDB has no
+--   secondary indices or queries, but it keeps keys sorted. A schema whose keys
+--   start with what you look records up by turns "all orders of a customer"
+--   into one seek and a short scan.
+--
+-- * __Corrupt data is a bug, not an outcome.__ Decoding failures call 'error'
+--   rather than returning 'Maybe' or 'Either'. If data written by your own
+--   program cannot be read back, the program is wrong, and carrying on would
+--   only spread the damage.
+--
+-- Keys and values are Haskell types with 'Serialize' instances from the
+-- @cereal@ package. They are encoded with 'encode' before being written and
+-- decoded with 'decode' after being read. The empty classes 'Key' and
+-- 'KeyValue' tie key types to value types, so that the type checker prevents
+-- reading a value of the wrong type for a key:
+--
+-- @
+-- data UserKey = UserKey Word32 deriving (Generic)
+-- instance 'Serialize' UserKey
+-- instance 'Key' UserKey
+-- instance 'KeyValue' UserKey User
+--
+-- getUser :: DB -> Word32 -> IO (Maybe User)
+-- getUser db = 'retrieve' db . UserKey
+-- @
+--
+-- = Prefix queries
+--
+-- Because RocksDB keeps keys sorted by their bytes, all keys that start with
+-- the same bytes are stored next to each other. The 'matching' family of
+-- functions takes a short key whose encoding is a prefix of the encoding of
+-- full keys, and returns every entry whose key starts with that prefix. See
+-- 'matching' for an example.
+--
+-- = Decoding errors
+--
+-- If a stored key or value cannot be decoded, these functions call 'error'.
+-- That indicates a bug, such as a mismatch between the 'Serialize' instance
+-- used to write and to read, or two key types sharing a prefix.
+--
+-- = Column families
+--
+-- Functions ending in @CF@ act on a given column family. The others act on the
+-- default column family.
 module Database.RocksDB.Query where
 
 import Conduit
@@ -19,13 +88,25 @@ import Data.ByteString qualified as B
 import Data.Serialize as S
 import Database.RocksDB as R
 
--- | Class for types that are database keys.
+-- | Class for types that are database keys. It has no methods; an instance
+-- marks a type as allowed to be used as a key in 'remove', 'deleteOp' and
+-- related functions.
+--
+-- Deletion needs to know only that a type is a key, not what it maps to, which
+-- is why it is a separate class.
 class Key key
 
--- | Class for types that are corresponding database key and value.
+-- | Class for types that are corresponding database key and value. It has no
+-- methods; an instance states that values of type @value@ are stored under keys
+-- of type @key@. Functions that read or write values require it.
+--
+-- The class has no methods because its job is purely to be checked by the
+-- compiler: it records a decision about your schema in a place where every read
+-- and write must agree with it.
 class KeyValue key value
 
--- | Read a value from the database, or 'Nothing' if not found.
+-- | Read a value from the default column family, or 'Nothing' if not found.
+-- Calls 'error' if the stored value cannot be decoded.
 retrieve ::
   (KeyValue key value, Serialize key, Serialize value) =>
   DB ->
@@ -33,6 +114,7 @@ retrieve ::
   IO (Maybe value)
 retrieve db = retrieveCommon db Nothing
 
+-- | Like 'retrieve', but read from the given column family.
 retrieveCF ::
   (KeyValue key value, Serialize key, Serialize value) =>
   DB ->
@@ -41,7 +123,8 @@ retrieveCF ::
   IO (Maybe value)
 retrieveCF db cf = retrieveCommon db (Just cf)
 
--- | Read a value from the database, or 'Nothing' if not found.
+-- | Read a value from the default column family, or from a column family if
+-- one is given. Returns 'Nothing' if not found.
 retrieveCommon ::
   (KeyValue key value, Serialize key, Serialize value) =>
   DB ->
@@ -60,6 +143,9 @@ retrieveCommon db mcf key =
       Just cf -> R.getCF db cf (encode key)
       Nothing -> R.get db (encode key)
 
+-- | Internal function to collect, from the current position of the iterator,
+-- every entry whose key starts with the encoding of the given key. Stops at the
+-- first entry that does not match.
 matchRecursiveList ::
   (KeyValue key value, Serialize key, Serialize value) =>
   key ->
@@ -80,7 +166,8 @@ matchRecursiveList base it = go
             else return []
     base_bytes = encode base
 
--- | Internal function for recursively matching a key.
+-- | Internal function for recursively matching a key. Like
+-- 'matchRecursiveList', but streams the entries through a conduit.
 matchRecursive ::
   ( KeyValue key value,
     Serialize key,
@@ -113,18 +200,28 @@ matchRecursive base it = go
 -- >   put (FullKey a b) = put a >> put b
 -- >   get = FullKey <$> get <*> get
 -- > instance KeyValue MyKey String
--- > main = do
--- >   db <- open "test-db" defaultOptions {createIfMissing = True}
--- >   insert db (FullKey "hello" "world") "despite all my rage"
--- >   Just record <- runResourceT . runConduit $
--- >     matching db def (ShortKey "hello") .| headC
--- >   print (record :: (MyKey, String))
--- >   -- (Fullkey "hello" "world","despite all my rage")
+-- > main =
+-- >   withDB "test-db" def {createIfMissing = True} $ \db -> do
+-- >     insert db (FullKey "hello" "world") "despite all my rage"
+-- >     Just record <- withIter db $ \it ->
+-- >       runConduit $ matching it (ShortKey "hello") .| headC
+-- >     print (record :: (MyKey, String))
+-- >     -- (FullKey "hello" "world","despite all my rage")
 --
 -- In this example the @ShortKey@ is serialized to the prefix of the only
 -- element in the database, which is then returned. Since the 'get' function of
 -- the 'Serialize' instance for @MyKey@ only understands how to deserialize a
 -- @FullKey@, then that is what is returned.
+--
+-- The iterator is moved to the first key at or after the prefix, and the
+-- conduit yields entries until it finds a key that does not start with the
+-- prefix. The iterator must stay open while the conduit runs. See
+-- 'matchingAsList' and 'firstMatching' for versions that manage the iterator
+-- themselves.
+--
+-- The conduit version exists for sets too large to hold in memory, and for
+-- consumers that stop early: only the entries that are actually consumed are read
+-- from the database.
 matching ::
   ( KeyValue key value,
     Serialize key,
@@ -139,6 +236,15 @@ matching it base = do
 
 -- | Like 'matching', but skip to the second key passed as argument, or after if
 -- there is no entry for the second key.
+--
+-- This is useful for pagination: pass the last key seen in the previous page
+-- (or the key just after it) as the second argument. The second key should
+-- start with the same prefix as the first; if it sorts before the prefix, no
+-- entries are returned.
+--
+-- Starting from a key instead of an offset is what makes deep pagination cheap:
+-- the database seeks straight to the page instead of reading and discarding
+-- every entry before it.
 matchingSkip ::
   ( KeyValue key value,
     Serialize key,
@@ -152,7 +258,8 @@ matchingSkip it base start = do
   liftIO (iterSeek it (encode start))
   matchRecursive base it
 
--- | Insert a record into the database.
+-- | Insert a record into the default column family, replacing any previous
+-- value for the key.
 insert ::
   (KeyValue key value, Serialize key, Serialize value) =>
   DB ->
@@ -161,7 +268,7 @@ insert ::
   IO ()
 insert db key value = R.put db (encode key) (encode value)
 
--- | Insert a record into the database.
+-- | Like 'insert', but write to the given column family.
 insertCF ::
   (KeyValue key value, Serialize key, Serialize value) =>
   DB ->
@@ -171,17 +278,19 @@ insertCF ::
   IO ()
 insertCF db cf key value = R.putCF db cf (encode key) (encode value)
 
--- | Delete a record from the database.
+-- | Delete a record from the default column family. Deleting a key that does
+-- not exist is not an error.
 remove :: (Key key, Serialize key) => DB -> key -> IO ()
 remove db key = delete db (encode key)
 
--- | Delete a record from the database.
+-- | Like 'remove', but delete from the given column family.
 removeCF ::
   (Key key, Serialize key) =>
   DB -> ColumnFamily -> key -> IO ()
 removeCF db cf key = deleteCF db cf (encode key)
 
--- | Get the 'BatchOp' to insert a record in the database.
+-- | Get the 'BatchOp' to insert a record in the default column family. Use with
+-- 'writeBatch' to apply several changes atomically.
 insertOp ::
   (KeyValue key value, Serialize key, Serialize value) =>
   key ->
@@ -189,7 +298,7 @@ insertOp ::
   BatchOp
 insertOp key value = R.Put (encode key) (encode value)
 
--- | Get the 'BatchOp' to insert a record in the database.
+-- | Like 'insertOp', but for the given column family.
 insertOpCF ::
   (KeyValue key value, Serialize key, Serialize value) =>
   ColumnFamily ->
@@ -198,19 +307,25 @@ insertOpCF ::
   BatchOp
 insertOpCF cf key value = R.PutCF cf (encode key) (encode value)
 
--- | Get the 'BatchOp' to delete a record from the database.
+-- | Get the 'BatchOp' to delete a record from the default column family. Use
+-- with 'writeBatch' to apply several changes atomically.
 deleteOp :: (Key key, Serialize key) => key -> BatchOp
 deleteOp key = Del (encode key)
 
--- | Get the 'BatchOp' to delete a record from the database.
+-- | Like 'deleteOp', but for the given column family.
 deleteOpCF :: (Key key, Serialize key) => ColumnFamily -> key -> BatchOp
 deleteOpCF cf key = DelCF cf (encode key)
 
--- | Write a batch to the database.
+-- | Write a batch to the database atomically. Synonym for 'write'.
+--
+-- @
+-- 'writeBatch' db ['insertOp' k1 v1, 'deleteOp' k2]
+-- @
 writeBatch :: DB -> [BatchOp] -> IO ()
 writeBatch = write
 
--- | Like 'matching' but return the first element only.
+-- | Like 'matching' but return the first element only, or 'Nothing' if no key
+-- starts with the prefix. Opens and closes its own iterator.
 firstMatching ::
   ( KeyValue key value,
     Serialize key,
@@ -222,7 +337,7 @@ firstMatching ::
 firstMatching db base =
   withIter db $ \it -> runConduit $ matching it base .| headC
 
--- | Like 'matching' but return the first element only.
+-- | Like 'firstMatching', but read from the given column family.
 firstMatchingCF ::
   ( KeyValue key value,
     Serialize key,
@@ -235,7 +350,8 @@ firstMatchingCF ::
 firstMatchingCF db cf base =
   withIterCF db cf $ \it -> runConduit $ matching it base .| headC
 
--- | Like 'matchingSkip', but return the first element only.
+-- | Like 'matchingSkip', but return the first element only. Opens and closes
+-- its own iterator.
 firstMatchingSkip ::
   ( KeyValue key value,
     Serialize key,
@@ -250,7 +366,7 @@ firstMatchingSkip db base start =
     runConduit $
       matchingSkip it base start .| headC
 
--- | Like 'matchingSkip', but return the first element only.
+-- | Like 'firstMatchingSkip', but read from the given column family.
 firstMatchingSkipCF ::
   ( KeyValue key value,
     Serialize key,
@@ -266,7 +382,9 @@ firstMatchingSkipCF db cf base start =
     runConduit $
       matchingSkip it base start .| headC
 
--- | Like 'matching' but return a list.
+-- | Like 'matching' but return a list. Opens and closes its own iterator. All
+-- matching entries are loaded into memory, so use 'matching' for prefixes that
+-- may match many entries.
 matchingAsList ::
   ( KeyValue key value,
     Serialize key,
@@ -280,7 +398,7 @@ matchingAsList db base =
     iterSeek it (encode base)
     matchRecursiveList base it
 
--- | Like 'matching' but return a list.
+-- | Like 'matchingAsList', but read from the given column family.
 matchingAsListCF ::
   ( KeyValue key value,
     Serialize key,
@@ -295,7 +413,7 @@ matchingAsListCF db cf base =
     iterSeek it (encode base)
     matchRecursiveList base it
 
--- | Like 'matchingSkip', but return a list.
+-- | Like 'matchingSkip', but return a list. Opens and closes its own iterator.
 matchingSkipAsList ::
   ( KeyValue key value,
     Serialize key,
@@ -310,7 +428,7 @@ matchingSkipAsList db base start =
     iterSeek it (encode start)
     matchRecursiveList base it
 
--- | Like 'matchingSkip', but return a list.
+-- | Like 'matchingSkipAsList', but read from the given column family.
 matchingSkipAsListCF ::
   ( KeyValue key value,
     Serialize key,
