@@ -118,8 +118,8 @@ The package is in Stackage nightly snapshots. Otherwise add it to `stack.yaml`:
 
 ```yaml
 extra-deps:
-  - rocksdb-query-0.6.0
-  - rocksdb-haskell-jprupp-2.6.0
+  - rocksdb-query-0.6.1
+  - rocksdb-haskell-jprupp-2.6.1
 ```
 
 ## Quick start

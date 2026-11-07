@@ -1,6 +1,6 @@
-resolver: nightly-2026-08-11
+resolver: nightly-2026-11-07
 extra-deps:
-  - rocksdb-haskell-jprupp-2.3.0
+  - rocksdb-haskell-jprupp-2.6.1
 nix:
   packages:
     - rocksdb

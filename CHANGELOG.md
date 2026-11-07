@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## 0.6.1
+### Changed
+- Documentation: the README explains the purpose and design of the library,
+  with installation steps and a tutorial on modelling a schema, and the
+  Haddock of every function says why it works the way it does.
+- Build against rocksdb-haskell-jprupp 2.6.1 and Stackage nightly-2026-11-07.
+
 ## 0.6.0
 ### Changed
 - Get rid of MonadIO and operate directly on IO monad.
